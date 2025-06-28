@@ -1,41 +1,21 @@
-import asyncio
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from playwright.async_api import async_playwright
+import os
+from telegram import Bot
+from telegram.ext import Updater, CommandHandler
 
-app = FastAPI()
+TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-class ParseRequest(BaseModel):
-    username: str
+if not TOKEN:
+    raise ValueError("TELEGRAM_TOKEN не установлен в переменных окружения!")
 
-@app.on_event("startup")
-async def startup():
-    app.state.playwright = await async_playwright().start()
-    app.state.browser = await app.state.playwright.chromium.launch(headless=True)
+def start(update, context):
+    update.message.reply_text("Привет! Бот запущен.")
 
-@app.on_event("shutdown")
-async def shutdown():
-    await app.state.browser.close()
-    await app.state.playwright.stop()
+def main():
+    updater = Updater(TOKEN)
+    dp = updater.dispatcher
+    dp.add_handler(CommandHandler("start", start))
+    updater.start_polling()
+    updater.idle()
 
-@app.post("/parse_gifts")
-async def parse_gifts(request: ParseRequest):
-    username = request.username
-    try:
-        context = await app.state.browser.new_context()
-        page = await context.new_page()
-
-        await page.goto("https://web.telegram.org/k/")
-        await page.wait_for_selector("input[placeholder='Search']", timeout=10000)
-        await page.fill("input[placeholder='Search']", username)
-        await page.keyboard.press("Enter")
-        await page.wait_for_timeout(3000)
-
-        gifts_elements = await page.query_selector_all("div[data-testid='gift']")
-        gifts = [await el.inner_text() for el in gifts_elements]
-
-        await context.close()
-
-        return {"username": username, "gifts": gifts}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+if __name__ == "__main__":
+    main()
